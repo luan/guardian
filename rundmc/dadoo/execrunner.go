@@ -301,42 +301,51 @@ func (p process) attach(pio garden.ProcessIO) error {
 	return nil
 }
 
+func (p process) ExitStatus() chan garden.ProcessStatus {
+	c := make(chan garden.ProcessStatus, 1)
+	go func() {
+		// open non-blocking incase exit pipe is already closed
+		exit, err := openNonBlocking(p.exit)
+		if err != nil {
+			c <- garden.ProcessStatus{Code: 1, Err: err}
+		}
+		defer exit.Close()
+
+		buf := make([]byte, 1)
+		exit.Read(buf)
+
+		p.ioWg.Wait()
+
+		if _, err := os.Stat(p.exitcode); os.IsNotExist(err) {
+			c <- garden.ProcessStatus{Code: 1, Err: fmt.Errorf("could not find the exitcode file for the process: %s", err.Error())}
+		}
+
+		exitcode, err := ioutil.ReadFile(p.exitcode)
+		if err != nil {
+			c <- garden.ProcessStatus{Code: 1, Err: err}
+		}
+
+		if len(exitcode) == 0 {
+			c <- garden.ProcessStatus{Code: 1, Err: fmt.Errorf("the exitcode file is empty")}
+		}
+
+		code, err := strconv.Atoi(string(exitcode))
+		if err != nil {
+			c <- garden.ProcessStatus{Code: 1, Err: fmt.Errorf("failed to parse exit code: %s", err.Error())}
+		}
+		c <- garden.ProcessStatus{Code: code, Err: nil}
+	}()
+	return c
+}
+
 func (p process) Wait() (int, error) {
-	// open non-blocking incase exit pipe is already closed
-	exit, err := openNonBlocking(p.exit)
-	if err != nil {
-		return 1, err
-	}
-	defer exit.Close()
-
-	buf := make([]byte, 1)
-	exit.Read(buf)
-
-	p.ioWg.Wait()
-
-	if _, err := os.Stat(p.exitcode); os.IsNotExist(err) {
-		return 1, fmt.Errorf("could not find the exitcode file for the process: %s", err.Error())
-	}
-
-	exitcode, err := ioutil.ReadFile(p.exitcode)
-	if err != nil {
-		return 1, err
-	}
-
-	if len(exitcode) == 0 {
-		return 1, fmt.Errorf("the exitcode file is empty")
-	}
-
-	code, err := strconv.Atoi(string(exitcode))
-	if err != nil {
-		return 1, fmt.Errorf("failed to parse exit code: %s", err.Error())
-	}
+	ret := <-p.ExitStatus()
 
 	if err := p.cleanup(); err != nil {
 		return 1, err
 	}
 
-	return code, nil
+	return ret.Code, ret.Err
 }
 
 func (p process) SetTTY(spec garden.TTYSpec) error {

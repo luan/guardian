@@ -132,7 +132,7 @@ func (d *ExecRunner) Run(log lager.Logger, processID string, spec *runrunc.Prepa
 	logw.Close()
 	syncw.Close()
 
-	stdin, stdout, stderr, err := process.openPipes(pio)
+	stdin, stdout, stderr, err := process.openPipes()
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (p *process) mkfifos() error {
 	return nil
 }
 
-func (p process) openPipes(pio garden.ProcessIO) (stdin, stdout, stderr *os.File, err error) {
+func (p process) openPipes() (stdin, stdout, stderr *os.File, err error) {
 	stdin, err = os.OpenFile(p.stdin, os.O_RDWR, 0600)
 	if err != nil {
 		return nil, nil, nil, err
@@ -264,34 +264,39 @@ func openNonBlocking(fileName string) (*os.File, error) {
 }
 
 func (p process) streamData(pio garden.ProcessIO, stdin, stdout, stderr *os.File) {
-	if pio.Stdin != nil {
-		go func() {
-			io.Copy(stdin, pio.Stdin)
-			stdin.Close()
-		}()
+	p.streamInput(pio.Stdin, stdin)
+	p.streamOutput(pio.Stdout, stdout)
+	p.streamOutput(pio.Stderr, stderr)
+}
+
+func (p process) streamInput(processReader io.Reader, input *os.File) {
+	if processReader == nil {
+		input.Close()
+		return
 	}
 
-	if pio.Stdout != nil {
-		p.ioWg.Add(1)
-		go func() {
-			io.Copy(pio.Stdout, stdout)
-			stdout.Close()
-			p.ioWg.Done()
-		}()
+	go func() {
+		io.Copy(input, processReader)
+		input.Close()
+	}()
+}
+
+func (p process) streamOutput(processWriter io.Writer, output *os.File) {
+	if processWriter == nil {
+		output.Close()
+		return
 	}
 
-	if pio.Stderr != nil {
-		p.ioWg.Add(1)
-		go func() {
-			io.Copy(pio.Stderr, stderr)
-			stderr.Close()
-			p.ioWg.Done()
-		}()
-	}
+	p.ioWg.Add(1)
+	go func() {
+		io.Copy(processWriter, output)
+		output.Close()
+		p.ioWg.Done()
+	}()
 }
 
 func (p process) attach(pio garden.ProcessIO) error {
-	stdin, stdout, stderr, err := p.openPipes(pio)
+	stdin, stdout, stderr, err := p.openPipes()
 	if err != nil {
 		return err
 	}

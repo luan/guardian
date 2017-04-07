@@ -85,7 +85,7 @@ func (d *ExecRunner) Run(log lager.Logger, processID string, spec *runrunc.Prepa
 	defer logr.Close()
 	defer syncr.Close()
 
-	process := d.newProcess(processID, processPath, filepath.Join(processPath, "pidfile"))
+	process := d.newProcess(log, processID, processPath, filepath.Join(processPath, "pidfile"))
 	process.mkfifos(spec.HostUID, spec.HostGID)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (d *ExecRunner) Run(log lager.Logger, processID string, spec *runrunc.Prepa
 
 func (d *ExecRunner) Attach(log lager.Logger, processID string, io garden.ProcessIO, processesPath string) (garden.Process, error) {
 	processPath := filepath.Join(processesPath, processID)
-	process := d.newProcess(processID, processPath, filepath.Join(processPath, "pidfile"))
+	process := d.newProcess(log, processID, processPath, filepath.Join(processPath, "pidfile"))
 	if err := process.attach(io); err != nil {
 		return nil, err
 	}
@@ -186,6 +186,7 @@ func (s osSignal) OsSignal() syscall.Signal {
 }
 
 type process struct {
+	logger                                       lager.Logger
 	id                                           string
 	stdin, stdout, stderr, exit, winsz, exitcode string
 	ioWg                                         *sync.WaitGroup
@@ -195,7 +196,7 @@ type process struct {
 	*signaller
 }
 
-func (d *ExecRunner) newProcess(id, dir, pidFilePath string) *process {
+func (d *ExecRunner) newProcess(log lager.Logger, id, dir, pidFilePath string) *process {
 	stdin := filepath.Join(dir, "stdin")
 	stdout := filepath.Join(dir, "stdout")
 	stderr := filepath.Join(dir, "stderr")
@@ -213,6 +214,7 @@ func (d *ExecRunner) newProcess(id, dir, pidFilePath string) *process {
 	}
 
 	return &process{
+		logger:   log,
 		id:       id,
 		stdin:    stdin,
 		stdout:   stdout,
@@ -345,7 +347,7 @@ func (p process) Wait() (int, error) {
 	}
 
 	if err := p.cleanup(); err != nil {
-		return 1, err
+		p.logger.Error("process-cleanup", err)
 	}
 
 	return code, nil

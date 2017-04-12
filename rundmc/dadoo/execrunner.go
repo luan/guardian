@@ -28,20 +28,22 @@ type PidGetter interface {
 }
 
 type ExecRunner struct {
-	dadooPath     string
-	runcPath      string
-	processIDGen  runrunc.UidGenerator
-	pidGetter     PidGetter
-	commandRunner command_runner.CommandRunner
+	dadooPath                string
+	runcPath                 string
+	processIDGen             runrunc.UidGenerator
+	pidGetter                PidGetter
+	commandRunner            command_runner.CommandRunner
+	cleanupProcessDirsOnWait bool
 }
 
-func NewExecRunner(dadooPath, runcPath string, processIDGen runrunc.UidGenerator, pidGetter PidGetter, commandRunner command_runner.CommandRunner) *ExecRunner {
+func NewExecRunner(dadooPath, runcPath string, processIDGen runrunc.UidGenerator, pidGetter PidGetter, commandRunner command_runner.CommandRunner, shouldCleanup bool) *ExecRunner {
 	return &ExecRunner{
-		dadooPath:     dadooPath,
-		runcPath:      runcPath,
-		processIDGen:  processIDGen,
-		pidGetter:     pidGetter,
-		commandRunner: commandRunner,
+		dadooPath:                dadooPath,
+		runcPath:                 runcPath,
+		processIDGen:             processIDGen,
+		pidGetter:                pidGetter,
+		commandRunner:            commandRunner,
+		cleanupProcessDirsOnWait: shouldCleanup,
 	}
 }
 
@@ -83,7 +85,7 @@ func (d *ExecRunner) Run(log lager.Logger, processID string, spec *runrunc.Prepa
 	defer logr.Close()
 	defer syncr.Close()
 
-	process := newProcess(processID, processPath, filepath.Join(processPath, "pidfile"), d.pidGetter)
+	process := d.newProcess(processID, processPath, filepath.Join(processPath, "pidfile"))
 	process.mkfifos(spec.HostUID, spec.HostGID)
 	if err != nil {
 		return nil, err
@@ -164,7 +166,7 @@ func (d *ExecRunner) Run(log lager.Logger, processID string, spec *runrunc.Prepa
 
 func (d *ExecRunner) Attach(log lager.Logger, processID string, io garden.ProcessIO, processesPath string) (garden.Process, error) {
 	processPath := filepath.Join(processesPath, processID)
-	process := newProcess(processID, processPath, filepath.Join(processPath, "pidfile"), d.pidGetter)
+	process := d.newProcess(processID, processPath, filepath.Join(processPath, "pidfile"))
 	if err := process.attach(io); err != nil {
 		return nil, err
 	}
@@ -193,13 +195,22 @@ type process struct {
 	*signaller
 }
 
-func newProcess(id, dir string, pidFilePath string, pidGetter PidGetter) *process {
+func (d *ExecRunner) newProcess(id, dir, pidFilePath string) *process {
 	stdin := filepath.Join(dir, "stdin")
 	stdout := filepath.Join(dir, "stdout")
 	stderr := filepath.Join(dir, "stderr")
 	winsz := filepath.Join(dir, "winsz")
 	exit := filepath.Join(dir, "exit")
 	exitcode := filepath.Join(dir, "exitcode")
+
+	cleanupFunc := func() error {
+		return nil
+	}
+	if d.cleanupProcessDirsOnWait {
+		cleanupFunc = func() error {
+			return os.RemoveAll(dir)
+		}
+	}
 
 	return &process{
 		id:       id,
@@ -211,12 +222,10 @@ func newProcess(id, dir string, pidFilePath string, pidGetter PidGetter) *proces
 		exitcode: exitcode,
 		ioWg:     &sync.WaitGroup{},
 		winszCh:  make(chan garden.WindowSize, 5),
-		cleanup: func() error {
-			return os.RemoveAll(dir)
-		},
+		cleanup:  cleanupFunc,
 		signaller: &signaller{
 			pidFilePath: pidFilePath,
-			pidGetter:   pidGetter,
+			pidGetter:   d.pidGetter,
 		},
 	}
 }

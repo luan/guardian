@@ -73,38 +73,48 @@ var _ = Describe("Run", func() {
 		),
 	)
 
-	Describe("process state cleanup", func() {
+	Describe("when we wait for process", func() {
 		var (
 			gardenArgs  []string
+			container   garden.Container
 			process     garden.Process
 			processPath string
 		)
 
 		JustBeforeEach(func() {
 			client = startGarden(gardenArgs...)
-			container, err := client.Create(garden.ContainerSpec{})
+			var err error
+			container, err = client.Create(garden.ContainerSpec{})
 			Expect(err).NotTo(HaveOccurred())
 
 			process, err = container.Run(garden.ProcessSpec{
-				Path: "echo",
-				Args: []string{"hello"},
+				Path: "/bin/sh",
+				Args: []string{"-c", "exit 13"},
 			}, garden.ProcessIO{})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = process.Wait()
+			code, err := process.Wait()
 			Expect(err).NotTo(HaveOccurred())
+			Expect(code).To(Equal(13))
 
 			processPath = filepath.Join(client.DepotDir, container.Handle(), "processes", process.ID())
 		})
 
 		Context("when --cleanup-process-dirs-on-wait is not set (default)", func() {
-			FIt("deletes all files in the process dir except for the exitcode", func() {
-				files, err := ioutil.ReadDir(processPath)
+			It("does not delete the process directory", func() {
+				_, err := os.Stat(processPath)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(len(files)).To(Equal(1))
+			})
 
-				_, err = os.Stat(filepath.Join(processPath, "exitcode"))
-				Expect(err).NotTo(HaveOccurred())
+			Context("when we reattach", func() {
+				It("can be Waited for again", func() {
+					reattachedProcess, err := container.Attach(process.ID(), garden.ProcessIO{})
+					Expect(err).NotTo(HaveOccurred())
+
+					code, err := reattachedProcess.Wait()
+					Expect(err).NotTo(HaveOccurred())
+					Expect(code).To(Equal(13))
+				})
 			})
 		})
 
@@ -113,7 +123,7 @@ var _ = Describe("Run", func() {
 				gardenArgs = []string{"--cleanup-process-dirs-on-wait"}
 			})
 
-			FIt("deletes the proccess directory", func() {
+			It("deletes the proccess directory", func() {
 				_, err := os.Stat(processPath)
 				Expect(os.IsNotExist(err)).To(BeTrue())
 			})

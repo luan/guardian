@@ -196,32 +196,25 @@ type process struct {
 	*signaller
 }
 
-func (d *ExecRunner) newProcess(log lager.Logger, id, dir, pidFilePath string) *process {
-	stdin := filepath.Join(dir, "stdin")
-	stdout := filepath.Join(dir, "stdout")
-	stderr := filepath.Join(dir, "stderr")
-	winsz := filepath.Join(dir, "winsz")
-	exit := filepath.Join(dir, "exit")
-	exitcode := filepath.Join(dir, "exitcode")
-
+func (d *ExecRunner) newProcess(log lager.Logger, id, processPath, pidFilePath string) *process {
 	cleanupFunc := func() error {
 		return nil
 	}
 	if d.cleanupProcessDirsOnWait {
 		cleanupFunc = func() error {
-			return os.RemoveAll(dir)
+			return os.RemoveAll(processPath)
 		}
 	}
 
 	return &process{
 		logger:   log,
 		id:       id,
-		stdin:    stdin,
-		stdout:   stdout,
-		stderr:   stderr,
-		winsz:    winsz,
-		exit:     exit,
-		exitcode: exitcode,
+		stdin:    filepath.Join(processPath, "stdin"),
+		stdout:   filepath.Join(processPath, "stdout"),
+		stderr:   filepath.Join(processPath, "stderr"),
+		winsz:    filepath.Join(processPath, "winsz"),
+		exit:     filepath.Join(processPath, "exit"),
+		exitcode: filepath.Join(processPath, "exitcode"),
 		ioWg:     &sync.WaitGroup{},
 		winszCh:  make(chan garden.WindowSize, 5),
 		cleanup:  cleanupFunc,

@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
@@ -29,6 +28,19 @@ type ImagePlugin struct {
 	PrivilegedCommandCreator   CommandCreator
 	CommandRunner              command_runner.CommandRunner
 	DefaultRootfs              string
+}
+
+type Image struct {
+	Config ImageConfig `json:"config,omitempty"`
+}
+
+type ImageConfig struct {
+	Env []string `json:"Env,omitempty"`
+}
+
+type CreateOutputs struct {
+	Rootfs string `json:"rootfs,omitempty"`
+	Image  Image  `json:"image,omitempty"`
 }
 
 func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
@@ -69,16 +81,15 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 		return "", nil, errorwrapper.Wrapf(err, "running image plugin create: %s", stdoutBuffer.String())
 	}
 
-	imagePath := strings.TrimSpace(stdoutBuffer.String())
-	rootfsPath := filepath.Join(imagePath, "rootfs")
-
-	envVars, err := readEnvVars(imagePath)
+	createOutputs := &CreateOutputs{}
+	err = json.Unmarshal(stdoutBuffer.Bytes(), createOutputs)
 	if err != nil {
-		log.Error("read-image-json-failed", err)
-		return "", nil, errorwrapper.Wrap(err, "reading image.json")
+		logData := lager.Data{"action": "create", "stdout": stdoutBuffer.String()}
+		log.Error("image-plugin-parsing", err, logData)
+		return "", nil, errorwrapper.Wrapf(err, "parsing image plugin create: %s", stdoutBuffer.String())
 	}
 
-	return rootfsPath, envVars, nil
+	return createOutputs.Rootfs, createOutputs.Image.Config.Env, nil
 }
 
 func (p *ImagePlugin) Destroy(log lager.Logger, handle string) error {

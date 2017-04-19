@@ -1,6 +1,7 @@
 package dadoo
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -11,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -146,9 +146,25 @@ func (d *ExecRunner) Run(log lager.Logger, processID string, spec *runrunc.Prepa
 	}
 
 	process.streamData(pio, stdin, stdout, stderr)
-	defer func() {
-		theErr = processLogs(log, logr, theErr, "runc", "runc exec")
-	}()
+
+	logExitCh := make(chan []byte)
+	go func(log lager.Logger, logs io.Reader, err error, logTag, loglineprefix string, logExitCh chan []byte) {
+		scanner := bufio.NewScanner(logs)
+
+		lastLogLine := []byte("")
+		for scanner.Scan() {
+			lastLogLine = scanner.Bytes()
+			forwardLogsToLager(log, lastLogLine, logTag)
+		}
+		logExitCh <- lastLogLine
+	}(log, logr, theErr, "runc", "runc exec", logExitCh)
+
+	defer func(logExitCh chan []byte) {
+		b := <-logExitCh
+		if theErr != nil {
+			theErr = wrapWithErrorFromLog(log, theErr, b, "runc exec")
+		}
+	}(logExitCh)
 
 	log.Info("read-exit-fd")
 	runcExitStatus := make([]byte, 1)
@@ -360,30 +376,12 @@ func (p process) SetTTY(spec garden.TTYSpec) error {
 	return json.NewEncoder(winSize).Encode(spec.WindowSize)
 }
 
-func processLogs(log lager.Logger, logs io.Reader, err error, logTag, logLinePrefix string) error {
-	buff, readErr := ioutil.ReadAll(logs)
-
-	if readErr != nil {
-		return fmt.Errorf("start: read log file: %s", readErr)
-	}
-
-	forwardLogsToLager(log, buff, logTag)
-
-	if err != nil {
-		return wrapWithErrorFromLog(log, err, buff, logLinePrefix)
-	}
-
-	return nil
-}
-
 func forwardLogsToLager(log lager.Logger, buff []byte, tag string) {
-	for _, logLine := range strings.Split(string(buff), "\n") {
-		parsedLogLine := struct{ Msg string }{}
-		if err := logfmt.Unmarshal([]byte(logLine), &parsedLogLine); err == nil {
-			log.Debug(tag, lager.Data{
-				"message": parsedLogLine.Msg,
-			})
-		}
+	parsedLogLine := struct{ Msg string }{}
+	if err := logfmt.Unmarshal(buff, &parsedLogLine); err == nil {
+		log.Debug(tag, lager.Data{
+			"message": parsedLogLine.Msg,
+		})
 	}
 }
 

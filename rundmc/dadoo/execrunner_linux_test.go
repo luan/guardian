@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/rundmc/dadoo"
@@ -50,6 +49,7 @@ var _ = Describe("Dadoo ExecRunner", func() {
 		log                                    *lagertest.TestLogger
 		receiveWinSize                         func(*os.File)
 		closeExitPipeCh                        chan struct{}
+		dadooIsHangingCh                       chan struct{}
 		stderrContents                         string
 
 		testFinishedCh chan bool
@@ -92,6 +92,8 @@ var _ = Describe("Dadoo ExecRunner", func() {
 
 		closeExitPipeCh = make(chan struct{})
 		close(closeExitPipeCh) // default to immediately succeeding
+
+		dadooIsHangingCh = make(chan struct{})
 
 		stderrContents = ""
 
@@ -145,6 +147,7 @@ var _ = Describe("Dadoo ExecRunner", func() {
 				fd4.Close()
 
 				if runcHangsForEver {
+					close(dadooIsHangingCh)
 					for {
 					}
 				}
@@ -355,16 +358,15 @@ var _ = Describe("Dadoo ExecRunner", func() {
 				})
 
 				It("still forwards runc logs in real time", func() {
-					runCh := make(chan struct{})
+					runcFinishedCh := make(chan struct{})
 					go func(chan struct{}) {
 						_, err := runner.Run(log, processID, &runrunc.PreparedSpec{Process: specs.Process{Args: []string{"Banana", "rama"}}},
 							bundlePath, processPath, "some-handle", nil, garden.ProcessIO{})
 						Expect(err).NotTo(HaveOccurred())
-						close(runCh)
-					}(runCh)
+						close(runcFinishedCh)
+					}(runcFinishedCh)
 
-					//this part should start once the runner.Run on the runcHangsForEver part
-					time.Sleep(time.Second * 1)
+					<-dadooIsHangingCh
 					runcLogs := make([]lager.LogFormat, 0)
 					for _, log := range log.Logs() {
 						if log.Message == "test.execrunner.runc" {
@@ -374,7 +376,7 @@ var _ = Describe("Dadoo ExecRunner", func() {
 
 					Expect(runcLogs).To(HaveLen(3))
 					Expect(runcLogs[0].Data).To(HaveKeyWithValue("message", "signal: potato"))
-					Expect(runCh).NotTo(BeClosed())
+					Expect(runcFinishedCh).NotTo(BeClosed())
 				})
 			})
 

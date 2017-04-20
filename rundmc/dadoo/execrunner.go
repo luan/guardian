@@ -147,24 +147,24 @@ func (d *ExecRunner) Run(log lager.Logger, processID string, spec *runrunc.Prepa
 
 	process.streamData(pio, stdin, stdout, stderr)
 
-	logExitCh := make(chan []byte)
-	go func(log lager.Logger, logs io.Reader, err error, logTag, loglineprefix string, logExitCh chan []byte) {
+	doneLoggingCh := make(chan []byte)
+	go func(log lager.Logger, logs io.Reader, err error, logTag, loglineprefix string, doneLoggingCh chan []byte) {
 		scanner := bufio.NewScanner(logs)
 
-		lastLogLine := []byte("")
+		nextLogLine := []byte("")
 		for scanner.Scan() {
-			lastLogLine = scanner.Bytes()
-			forwardLogsToLager(log, lastLogLine, logTag)
+			nextLogLine = scanner.Bytes()
+			forwardLogLineToLager(log, nextLogLine, logTag)
 		}
-		logExitCh <- lastLogLine
-	}(log, logr, theErr, "runc", "runc exec", logExitCh)
+		doneLoggingCh <- nextLogLine
+	}(log, logr, theErr, "runc", "runc exec", doneLoggingCh)
 
-	defer func(logExitCh chan []byte) {
-		b := <-logExitCh
+	defer func(doneLoggingCh chan []byte) {
+		lastLogLine := <-doneLoggingCh
 		if theErr != nil {
-			theErr = wrapWithErrorFromLog(log, theErr, b, "runc exec")
+			theErr = wrapWithErrorFromLog(log, theErr, lastLogLine, "runc exec")
 		}
-	}(logExitCh)
+	}(doneLoggingCh)
 
 	log.Info("read-exit-fd")
 	runcExitStatus := make([]byte, 1)
@@ -376,7 +376,7 @@ func (p process) SetTTY(spec garden.TTYSpec) error {
 	return json.NewEncoder(winSize).Encode(spec.WindowSize)
 }
 
-func forwardLogsToLager(log lager.Logger, buff []byte, tag string) {
+func forwardLogLineToLager(log lager.Logger, buff []byte, tag string) {
 	parsedLogLine := struct{ Msg string }{}
 	if err := logfmt.Unmarshal(buff, &parsedLogLine); err == nil {
 		log.Debug(tag, lager.Data{

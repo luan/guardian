@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/rundmc/dadoo"
@@ -49,7 +50,6 @@ var _ = Describe("Dadoo ExecRunner", func() {
 		log                                    *lagertest.TestLogger
 		receiveWinSize                         func(*os.File)
 		closeExitPipeCh                        chan struct{}
-		dadooIsHangingCh                       chan struct{}
 		stderrContents                         string
 
 		testFinishedCh chan bool
@@ -92,8 +92,6 @@ var _ = Describe("Dadoo ExecRunner", func() {
 
 		closeExitPipeCh = make(chan struct{})
 		close(closeExitPipeCh) // default to immediately succeeding
-
-		dadooIsHangingCh = make(chan struct{})
 
 		stderrContents = ""
 
@@ -147,7 +145,6 @@ var _ = Describe("Dadoo ExecRunner", func() {
 				fd4.Close()
 
 				if runcHangsForEver {
-					close(dadooIsHangingCh)
 					for {
 					}
 				}
@@ -359,14 +356,16 @@ var _ = Describe("Dadoo ExecRunner", func() {
 
 				It("still forwards runc logs in real time", func() {
 					runcFinishedCh := make(chan struct{})
-					go func(chan struct{}) {
+					go func(log lager.Logger, processID, bundlePath, processPath string, runcFinishedCh chan struct{}) {
 						_, err := runner.Run(log, processID, &runrunc.PreparedSpec{Process: specs.Process{Args: []string{"Banana", "rama"}}},
 							bundlePath, processPath, "some-handle", nil, garden.ProcessIO{})
 						Expect(err).NotTo(HaveOccurred())
 						close(runcFinishedCh)
-					}(runcFinishedCh)
+					}(log, processID, bundlePath, processPath, runcFinishedCh)
 
-					<-dadooIsHangingCh
+					// allow some time for dadoo fake to send the logs to execrunner
+					time.Sleep(time.Second)
+
 					runcLogs := make([]lager.LogFormat, 0)
 					for _, log := range log.Logs() {
 						if log.Message == "test.execrunner.runc" {

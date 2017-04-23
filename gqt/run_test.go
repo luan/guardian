@@ -455,6 +455,41 @@ var _ = Describe("Run", func() {
 			Eventually(client).Should(gbytes.Say(`execrunner.runc`))
 		})
 
+		FContext("when runc hangs indefinitely", func() {
+			var (
+				container garden.Container
+				syncPipe  *os.File
+			)
+
+			BeforeEach(func() {
+				hangingRuncPath, err := gexec.Build("code.cloudfoundry.org/guardian/gqt/cmd/runc_wrapper_hanging_exec")
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(exec.Command("mkfifo", "syncpipe").Run()).To(Succeed())
+
+				Expect(os.Setenv("TEST_RUNC_PIPE", "syncpipe")).To(Succeed())
+				syncPipe, err = os.OpenFile("syncpipe", os.O_RDWR, 0600)
+				Expect(err).NotTo(HaveOccurred())
+
+				client = startGarden("--runc-bin", hangingRuncPath, "--log-level", "debug")
+				container, err = client.Create(garden.ContainerSpec{})
+				Expect(err).NotTo(HaveOccurred())
+
+				syncPipe.WriteString("done")
+			})
+
+			AfterEach(func() {
+				Expect(os.Unsetenv("TEST_RUNC_PIPE")).To(Succeed())
+				Expect(os.Remove("syncpipe")).To(Succeed())
+			})
+
+			It("forwards runc logs to lager", func() {
+				go container.Run(garden.ProcessSpec{Path: "id"}, garden.ProcessIO{})
+
+				Eventually(client).Should(gbytes.Say("guardian-runc-about-to-hang"))
+			})
+		})
+
 		Describe("Signalling", func() {
 			It("should forward SIGTERM to the process", func() {
 				client = startGarden()

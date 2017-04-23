@@ -8,6 +8,7 @@ import (
 
 func main() {
 	logPath := ""
+
 	for idx, s := range os.Args {
 		if s == "-log" || s == "--log" {
 			logPath = os.Args[idx+1]

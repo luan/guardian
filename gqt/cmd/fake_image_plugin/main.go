@@ -48,6 +48,10 @@ func main() {
 			Usage: "Image json to use as image json",
 		},
 		cli.StringFlag{
+			Name:  "mounts-json",
+			Usage: "Mounts json",
+		},
+		cli.StringFlag{
 			Name:  "create-log-content",
 			Usage: "Fake log content to write to stderr on create",
 		},
@@ -171,6 +175,14 @@ var CreateCommand = cli.Command{
 			}
 		}
 
+		var mounts []imageplugin.Mount
+		mountsJson := ctx.GlobalString("mounts-json")
+		if mountsJson != "" {
+			if err := json.Unmarshal([]byte(mountsJson), &mounts); err != nil {
+				panic(err)
+			}
+		}
+
 		logContent := ctx.GlobalString("create-log-content")
 		if logContent != "" {
 			log := lager.NewLogger("fake-image-plugin")
@@ -181,6 +193,7 @@ var CreateCommand = cli.Command{
 		output := imageplugin.CreateOutputs{
 			Rootfs: rootfsPath,
 			Image:  *image,
+			Mounts: mounts,
 		}
 
 		b, err := json.Marshal(output)

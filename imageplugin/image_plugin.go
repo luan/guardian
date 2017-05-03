@@ -37,8 +37,16 @@ type ImageConfig struct {
 }
 
 type CreateOutputs struct {
-	Rootfs string `json:"rootfs,omitempty"`
-	Image  Image  `json:"image,omitempty"`
+	Rootfs string  `json:"rootfs,omitempty"`
+	Image  Image   `json:"image,omitempty"`
+	Mounts []Mount `json:"mounts,omitempty"`
+}
+
+type Mount struct {
+	Options []string `json:"options,omitempty"`
+	Source  string   `json:"source"`
+	Dest    string   `json:"destination"`
+	Type    string   `json:"type"`
 }
 
 func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {

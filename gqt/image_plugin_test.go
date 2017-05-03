@@ -1,6 +1,7 @@
 package gqt_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -150,6 +151,58 @@ var _ = Describe("Image Plugin", func() {
 
 					Eventually(buffer).Should(gbytes.Say("MY_VAR=set"))
 					Eventually(buffer).Should(gbytes.Say("MY_SECOND_VAR=also_set"))
+				})
+			})
+
+			Context("when there are mounts", func() {
+				var currTempDirName string
+				currFileName := "/sample-string-file"
+				currFileContent := "sample-string-file-content"
+
+				BeforeEach(func() {
+					var err error
+					currTempDirName, err = ioutil.TempDir("", "bind-mount")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(ioutil.WriteFile(currTempDirName+currFileName, []byte(currFileContent), 0644)).To(Succeed())
+
+					mounts := []imageplugin.Mount{
+						{
+							Type:    "bind",
+							Options: []string{"bind"},
+							Source:  currTempDirName,
+							Dest:    "/bind-mount",
+						},
+					}
+					mountsJson, err := json.Marshal(mounts)
+					Expect(err).NotTo(HaveOccurred())
+
+					args = append(args,
+						"--image-plugin-extra-arg", "\"--mounts-json\"",
+						"--image-plugin-extra-arg", string(mountsJson),
+					)
+
+					gardenDefaultRootfs := os.Getenv("GARDEN_TEST_ROOTFS")
+					Expect(copyFile(filepath.Join(gardenDefaultRootfs, "bin", "cat"),
+						filepath.Join(tmpDir, "cat"))).To(Succeed())
+				})
+
+				AfterEach(func() {
+					err := os.RemoveAll(currTempDirName)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				FIt("mounts the directories from the image plugin response", func() {
+					var stdout bytes.Buffer
+					process, err := container.Run(garden.ProcessSpec{
+						Path: "/cat",
+						Args: []string{"/bind-mount" + currFileName},
+					}, garden.ProcessIO{
+						Stdout: io.MultiWriter(&stdout, GinkgoWriter),
+						Stderr: GinkgoWriter,
+					})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(process.Wait()).To(Equal(0))
+					Expect(stdout.String()).To(Equal(currFileContent))
 				})
 			})
 

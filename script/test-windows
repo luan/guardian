@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -e
+
+ARGS=$@
+
+DIRS=$(for d in $ARGS; do [ -d "$d" ] && echo "$d"; done)
+
+(cd ../../..; ./scripts/remote-fly ci/guardian-windows.yml -- $ARGS)
+

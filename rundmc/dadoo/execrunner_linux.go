@@ -22,11 +22,6 @@ import (
 	"github.com/kr/logfmt"
 )
 
-//go:generate counterfeiter . PidGetter
-type PidGetter interface {
-	Pid(pidFilePath string) (int, error)
-}
-
 type ExecRunner struct {
 	dadooPath                string
 	runcPath                 string

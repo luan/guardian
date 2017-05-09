@@ -20,7 +20,7 @@ var _ = Describe("PidFileReader", func() {
 		pdr *dadoo.PidFileReader
 
 		pidFileContents string
-		pidFilePath     string
+		pidFile         *os.File
 	)
 
 	BeforeEach(func() {
@@ -37,27 +37,28 @@ var _ = Describe("PidFileReader", func() {
 			SleepInterval: 20 * time.Millisecond,
 		}
 
-		pidFile, err := ioutil.TempFile("", "")
+		var err error
+		pidFile, err = ioutil.TempFile("", "")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = pidFile.Write([]byte(pidFileContents))
 		Expect(err).NotTo(HaveOccurred())
-
-		pidFilePath = pidFile.Name()
 	})
 
 	AfterEach(func() {
-		Expect(os.RemoveAll(pidFilePath)).To(Succeed())
+		pidFile.Close()
+		os.RemoveAll(pidFile.Name())
 	})
 
 	It("should read the pid file", func() {
-		pid, err := pdr.Pid(pidFilePath)
+		pid, err := pdr.Pid(pidFile.Name())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(pid).To(Equal(5621))
 	})
 
 	Context("when pid file does not exist", func() {
 		JustBeforeEach(func() {
-			Expect(os.RemoveAll(pidFilePath)).To(Succeed())
+			Expect(pidFile.Close()).To(Succeed())
+			Expect(os.RemoveAll(pidFile.Name())).To(Succeed())
 		})
 
 		Context("and it is eventually created", func() {
@@ -66,7 +67,7 @@ var _ = Describe("PidFileReader", func() {
 				go func() {
 					defer GinkgoRecover()
 
-					pid, err := pdr.Pid(pidFilePath)
+					pid, err := pdr.Pid(pidFile.Name())
 					Expect(err).NotTo(HaveOccurred())
 					Expect(pid).To(Equal(5621))
 
@@ -80,7 +81,7 @@ var _ = Describe("PidFileReader", func() {
 				// read the file. Hence, after we write the file the clock is
 				// incremented by a further 10ms.
 				clk.WaitForWatcherAndIncrement(time.Millisecond * 10)
-				Expect(ioutil.WriteFile(pidFilePath, []byte("5621"), 0766)).To(Succeed())
+				Expect(ioutil.WriteFile(pidFile.Name(), []byte("5621"), 0766)).To(Succeed())
 				clk.Increment(time.Millisecond * 10)
 
 				Eventually(pidReturns).Should(BeClosed())
@@ -94,7 +95,7 @@ var _ = Describe("PidFileReader", func() {
 				go func() {
 					defer GinkgoRecover()
 
-					_, err := pdr.Pid(pidFilePath)
+					_, err := pdr.Pid(pidFile.Name())
 					Expect(err).To(MatchError(ContainSubstring("timeout")))
 
 					close(pidReturns)
@@ -111,10 +112,18 @@ var _ = Describe("PidFileReader", func() {
 	})
 
 	Context("when the pid file is empty", func() {
+		var (
+			emptyPidFile *os.File
+		)
 		JustBeforeEach(func() {
-			f, err := os.OpenFile(pidFilePath, os.O_TRUNC, 0766)
+			var err error
+			emptyPidFile, err = ioutil.TempFile("", "")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(f.Close()).To(Succeed())
+			Expect(emptyPidFile.Close()).To(Succeed())
+		})
+
+		AfterEach(func() {
+			os.Remove(emptyPidFile.Name())
 		})
 
 		Context("and it is eventually populated", func() {
@@ -123,7 +132,7 @@ var _ = Describe("PidFileReader", func() {
 				go func() {
 					defer GinkgoRecover()
 
-					pid, err := pdr.Pid(pidFilePath)
+					pid, err := pdr.Pid(emptyPidFile.Name())
 					Expect(err).NotTo(HaveOccurred())
 					Expect(pid).To(Equal(5621))
 
@@ -137,7 +146,7 @@ var _ = Describe("PidFileReader", func() {
 				// read the file. Hence, after we write the file the clock is
 				// incremented by a further 10ms.
 				clk.WaitForWatcherAndIncrement(time.Millisecond * 10)
-				Expect(ioutil.WriteFile(pidFilePath, []byte("5621"), 0766)).To(Succeed())
+				Expect(ioutil.WriteFile(emptyPidFile.Name(), []byte("5621"), 0766)).To(Succeed())
 				clk.Increment(time.Millisecond * 10)
 
 				Eventually(pidReturns).Should(BeClosed())
@@ -151,7 +160,7 @@ var _ = Describe("PidFileReader", func() {
 				go func() {
 					defer GinkgoRecover()
 
-					_, err := pdr.Pid(pidFilePath)
+					_, err := pdr.Pid(emptyPidFile.Name())
 					Expect(err).To(MatchError(ContainSubstring("timeout")))
 
 					close(pidReturns)
@@ -173,7 +182,7 @@ var _ = Describe("PidFileReader", func() {
 		})
 
 		It("should return error", func() {
-			_, err := pdr.Pid(pidFilePath)
+			_, err := pdr.Pid(pidFile.Name())
 			Expect(err).To(MatchError(ContainSubstring("parsing pid file contents")))
 		})
 	})

@@ -81,6 +81,14 @@ var _ = Describe("Surviving Restarts", func() {
 				},
 			})
 
+			container.NetOut(garden.NetOutRule{
+				Protocol: garden.ProtocolICMP,
+				ICMPs: &garden.ICMPControl{
+					Type: garden.ICMPType(255),
+					Code: garden.ICMPControlCode(uint8(255)),
+				},
+			})
+
 			info, err := container.Info()
 			Expect(err).NotTo(HaveOccurred())
 			externalIP = info.ExternalIP

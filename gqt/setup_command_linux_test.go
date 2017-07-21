@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -16,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
+	"golang.org/x/sys/unix"
 )
 
 var _ = Describe("gdn setup", func() {
@@ -79,6 +81,28 @@ var _ = Describe("gdn setup", func() {
 			mountpointCmd.Stderr = GinkgoWriter
 			Expect(mountpointCmd.Run()).To(Succeed())
 		})
+
+		Context("when setting up for rootless", func() {
+			var idToStr = func(id uint32) string {
+				return strconv.FormatUint(uint64(id), 10)
+			}
+			BeforeEach(func() {
+				setupArgs = append(setupArgs, "--rootless-uid", idToStr(unprivilegedUID), "--rootless-gid", idToStr(unprivilegedGID))
+			})
+
+			FIt("creates a rootless subdirectory owned by maximus for each cgroup subsystem", func() {
+				for _, subsystem := range []string{"cpu", "memory", "blkio"} {
+
+					path := filepath.Join(cgroupsRoot, subsystem, "rootless")
+					Expect(path).To(BeADirectory())
+
+					var stat unix.Stat_t
+					Expect(unix.Stat(path, &stat)).To(Succeed())
+					Expect(stat.Uid).To(Equal(unprivilegedUID))
+					Expect(stat.Gid).To(Equal(unprivilegedGID))
+				}
+			})
+		})
 	})
 
 	Context("when we start the server", func() {
@@ -93,6 +117,12 @@ var _ = Describe("gdn setup", func() {
 
 		AfterEach(func() {
 			Expect(server.DestroyAndStop()).To(Succeed())
+		})
+
+		Context("when the server is running rootless as maximus", func() {
+			It("should be able to create a container", func() {
+
+			})
 		})
 
 		Context("when the server is running as root", func() {

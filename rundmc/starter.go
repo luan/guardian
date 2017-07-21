@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"code.cloudfoundry.org/commandrunner"
@@ -24,11 +24,16 @@ type CgroupsFormatError struct {
 	Content string
 }
 
+//go:generate counterfeiter . Chowner
+type Chowner interface {
+	Chown(path string) error
+}
+
 func (err CgroupsFormatError) Error() string {
 	return fmt.Sprintf("unknown /proc/cgroups format: %s", err.Content)
 }
 
-func NewStarter(logger lager.Logger, procCgroupReader io.ReadCloser, procSelfCgroupReader io.ReadCloser, cgroupMountpoint string, runner commandrunner.CommandRunner) *Starter {
+func NewStarter(logger lager.Logger, procCgroupReader io.ReadCloser, procSelfCgroupReader io.ReadCloser, cgroupMountpoint string, runner commandrunner.CommandRunner, chowner Chowner) *Starter {
 	return &Starter{
 		&CgroupStarter{
 			CgroupPath:      cgroupMountpoint,
@@ -36,6 +41,7 @@ func NewStarter(logger lager.Logger, procCgroupReader io.ReadCloser, procSelfCgr
 			ProcSelfCgroups: procSelfCgroupReader,
 			CommandRunner:   runner,
 			Logger:          logger,
+			Chowner:         chowner,
 		},
 	}
 }
@@ -99,7 +105,17 @@ func (s *CgroupStarter) mountCgroupsIfNeeded(logger lager.Logger) error {
 			cgroupsToMount = subsystem
 		}
 
-		if err := s.mountCgroup(logger, path.Join(s.CgroupPath, subsystem), cgroupsToMount); err != nil {
+		cgroupPath := filepath.Join(s.CgroupPath, subsystem)
+		if err := s.idempotentCgroupMount(logger, cgroupPath, cgroupsToMount); err != nil {
+			return err
+		}
+
+		subGroup := filepath.Join(cgroupPath, "garden")
+		if err := os.MkdirAll(subGroup, 0700); err != nil {
+			return err
+		}
+
+		if err := s.Chowner.Chown(subGroup); err != nil {
 			return err
 		}
 	}
@@ -138,7 +154,7 @@ func (s *CgroupStarter) subsystemGroupings() (map[string]string, error) {
 	return groupings, scanner.Err()
 }
 
-func (s *CgroupStarter) mountCgroup(logger lager.Logger, cgroupPath, subsystems string) error {
+func (s *CgroupStarter) idempotentCgroupMount(logger lager.Logger, cgroupPath, subsystems string) error {
 	logger = logger.Session("mount-cgroup", lager.Data{
 		"path":       cgroupPath,
 		"subsystems": subsystems,

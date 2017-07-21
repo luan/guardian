@@ -219,7 +219,8 @@ func (cmd *ServerCommand) wireCgroupsStarter(logger lager.Logger) gardener.Start
 		cgroupsMountpoint = "/sys/fs/cgroup"
 	}
 
-	return rundmc.NewStarter(logger, mustOpen("/proc/cgroups"), mustOpen("/proc/self/cgroup"), cgroupsMountpoint, commandRunner())
+	chowner := &rundmc.OwnerChanger{UID: 0, GID: 0}
+	return rundmc.NewStarter(logger, mustOpen("/proc/cgroups"), mustOpen("/proc/self/cgroup"), cgroupsMountpoint, commandRunner(), chowner)
 }
 
 func (cmd *ServerCommand) wireExecPreparer() runrunc.ExecPreparer {

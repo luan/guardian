@@ -11,6 +11,7 @@ import (
 	"code.cloudfoundry.org/commandrunner/fake_command_runner"
 	. "code.cloudfoundry.org/commandrunner/fake_command_runner/matchers"
 	"code.cloudfoundry.org/guardian/rundmc"
+	"code.cloudfoundry.org/guardian/rundmc/rundmcfakes"
 	"code.cloudfoundry.org/lager"
 	"code.cloudfoundry.org/lager/lagertest"
 	. "github.com/onsi/ginkgo"
@@ -24,6 +25,7 @@ var _ = Describe("CgroupStarter", func() {
 		procCgroups     *FakeReadCloser
 		procSelfCgroups *FakeReadCloser
 		logger          lager.Logger
+		chowner         *rundmcfakes.FakeChowner
 
 		tmpDir string
 	)
@@ -37,12 +39,14 @@ var _ = Describe("CgroupStarter", func() {
 		runner = fake_command_runner.New()
 		procCgroups = &FakeReadCloser{Buffer: bytes.NewBufferString("")}
 		procSelfCgroups = &FakeReadCloser{Buffer: bytes.NewBufferString("")}
+		chowner = &rundmcfakes.FakeChowner{}
 		starter = &rundmc.CgroupStarter{
 			CgroupPath:      path.Join(tmpDir, "cgroup"),
 			CommandRunner:   runner,
 			ProcCgroups:     procCgroups,
 			ProcSelfCgroups: procSelfCgroups,
 			Logger:          logger,
+			Chowner:         chowner,
 		}
 	})
 
@@ -143,6 +147,23 @@ var _ = Describe("CgroupStarter", func() {
 		It("creates needed directories", func() {
 			starter.Start()
 			Expect(path.Join(tmpDir, "cgroup", "devices")).To(BeADirectory())
+		})
+
+		It("creates subdirectories owned by the specified user and group", func() {
+			starter.Start()
+			allChowns := []string{}
+			for i := 0; i < chowner.ChownCallCount(); i++ {
+				allChowns = append(allChowns, chowner.ChownArgsForCall(i))
+			}
+
+			for _, subsystem := range []string{"devices", "cpu", "memory"} {
+				fullPath := path.Join(tmpDir, "cgroup", subsystem, "garden")
+				Expect(fullPath).To(BeADirectory())
+				Expect(allChowns).To(ContainElement(fullPath))
+				dirStat, err := os.Stat(fullPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(dirStat.Mode() & os.ModePerm).To(Equal(os.FileMode(0700)))
+			}
 		})
 
 		Context("when a subsystem is not yet mounted anywhere", func() {

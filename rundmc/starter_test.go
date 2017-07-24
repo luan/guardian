@@ -162,7 +162,6 @@ var _ = Describe("CgroupStarter", func() {
 				Expect(allChowns).To(ContainElement(fullPath))
 				dirStat, err := os.Stat(fullPath)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(dirStat.Mode() & os.ModePerm).To(Equal(os.FileMode(0700)))
 			}
 		})
 

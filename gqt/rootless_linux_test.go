@@ -2,6 +2,7 @@ package gqt_test
 
 import (
 	"io"
+	"strings"
 	"syscall"
 
 	. "github.com/onsi/ginkgo"
@@ -130,6 +131,38 @@ var _ = Describe("rootless containers", func() {
 			It("succeeds anyway", func() {
 				_, err := client.Create(garden.ContainerSpec{})
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+		Context("when we setup memory limit", func() {
+			var cgroupPath, cgroupType string
+			var container garden.Container
+			JustBeforeEach(func() {
+				currentCgroup, err := exec.Command("sh", "-c", "cat /proc/self/cgroup | head -1 | awk -F ':' '{print $3}'").CombinedOutput()
+				Expect(err).NotTo(HaveOccurred())
+				cgroupName := strings.TrimSpace(string(currentCgroup))
+
+				cgroupPath = fmt.Sprintf("/tmp/test-garden-%d/cgroups-%d/%s/%s/garden/%s",
+					GinkgoParallelNode(), GinkgoParallelNode(), cgroupType, cgroupName, container.Handle())
+			})
+			BeforeEach(func() {
+				cgroupType = "memory"
+				var err error
+				container, err = client.Create(garden.ContainerSpec{
+					Limits: garden.Limits{
+						Memory: garden.MemoryLimits{
+							LimitInBytes: 64 * 1024 * 1024,
+						},
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+			})
+			It("creates container with the specified memory limit", func() {
+				memLimitBytes, err := ioutil.ReadFile(filepath.Join(cgroupPath, "memory.limit_in_bytes"))
+				Expect(err).NotTo(HaveOccurred())
+				memLimit := strings.TrimSpace(string(memLimitBytes))
+				Expect(memLimit).To(Equal("10241024"))
+
 			})
 		})
 	})

@@ -6,12 +6,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"code.cloudfoundry.org/commandrunner"
 	"code.cloudfoundry.org/guardian/logging"
 	"code.cloudfoundry.org/lager"
+	"github.com/opencontainers/runc/libcontainer/cgroups"
 )
 
 type Starter struct {
@@ -53,7 +54,8 @@ type CgroupStarter struct {
 	ProcCgroups     io.ReadCloser
 	ProcSelfCgroups io.ReadCloser
 
-	Logger lager.Logger
+	Logger  lager.Logger
+	Chowner Chowner
 }
 
 func (s *CgroupStarter) Start() error {
@@ -105,12 +107,18 @@ func (s *CgroupStarter) mountCgroupsIfNeeded(logger lager.Logger) error {
 			cgroupsToMount = subsystem
 		}
 
-		cgroupPath := filepath.Join(s.CgroupPath, subsystem)
-		if err := s.idempotentCgroupMount(logger, cgroupPath, cgroupsToMount); err != nil {
+		cgroupSubsystemPath := path.Join(s.CgroupPath, subsystem)
+		if err := s.idempotentCgroupMount(logger, cgroupSubsystemPath, cgroupsToMount); err != nil {
 			return err
 		}
 
-		subGroup := filepath.Join(cgroupPath, "garden")
+		cgroupName, err := cgroups.GetOwnCgroupPath(subsystem)
+		if err != nil {
+			return err
+		}
+
+		subGroup := path.Join(cgroupName, "garden")
+
 		if err := os.MkdirAll(subGroup, 0700); err != nil {
 			return err
 		}

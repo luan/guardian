@@ -82,7 +82,7 @@ var _ = Describe("gdn setup", func() {
 			Expect(mountpointCmd.Run()).To(Succeed())
 		})
 
-		Context("when setting up for rootless", func() {
+		FContext("when setting up for rootless", func() {
 			var idToStr = func(id uint32) string {
 				return strconv.FormatUint(uint64(id), 10)
 			}
@@ -90,10 +90,17 @@ var _ = Describe("gdn setup", func() {
 				setupArgs = append(setupArgs, "--rootless-uid", idToStr(unprivilegedUID), "--rootless-gid", idToStr(unprivilegedGID))
 			})
 
-			FIt("creates a rootless subdirectory owned by maximus for each cgroup subsystem", func() {
-				for _, subsystem := range []string{"cpu", "memory", "blkio"} {
+			It("creates a rootless subdirectory owned by maximus for each cgroup subsystem", func() {
 
-					path := filepath.Join(cgroupsRoot, subsystem, "rootless")
+				currentCgroup, err := exec.Command("sh", "-c", "cat /proc/self/cgroup | head -1 | awk -F ':' '{print $3}'").CombinedOutput()
+				Expect(err).NotTo(HaveOccurred())
+				cgroupName := strings.TrimSpace(string(currentCgroup))
+
+				subsystems, err := ioutil.ReadDir(cgroupsRoot)
+				Expect(err).NotTo(HaveOccurred())
+
+				for _, subsystem := range subsystems {
+					path := filepath.Join(cgroupsRoot, subsystem.Name(), cgroupName, "garden")
 					Expect(path).To(BeADirectory())
 
 					var stat unix.Stat_t

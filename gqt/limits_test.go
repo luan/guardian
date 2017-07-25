@@ -39,7 +39,7 @@ var _ = Describe("Limits", func() {
 		Expect(err).NotTo(HaveOccurred())
 		cgroupName = strings.TrimSpace(string(currentCgroup))
 
-		cgroupPath = fmt.Sprintf("/tmp/test-garden-%d/cgroups-%d/%s/%s/%s", GinkgoParallelNode(), GinkgoParallelNode(), cgroupType,
+		cgroupPath = fmt.Sprintf("/tmp/test-garden-%d/cgroups-%d/%s/%s/garden/%s", GinkgoParallelNode(), GinkgoParallelNode(), cgroupType,
 			cgroupName, container.Handle())
 	})
 

@@ -36,6 +36,7 @@ var _ = Describe("rootless containers", func() {
 		)
 		tag := fmt.Sprintf("%d", GinkgoParallelNode())
 		setupArgs := []string{"setup", "--tag", tag}
+		//setupArgs = append(setupArgs, "--rootless-uid", idToStr(unprivilegedUID), "--rootless-gid", idToStr(unprivilegedGID))
 		cmd := exec.Command(binaries.Gdn, setupArgs...)
 		cmd.Env = append(
 			[]string{
@@ -159,10 +160,10 @@ var _ = Describe("rootless containers", func() {
 			})
 			It("creates container with the specified memory limit", func() {
 				Expect(cgroupPath).To(BeADirectory())
-				// memLimitBytes, err := ioutil.ReadFile(filepath.Join(cgroupPath, "memory.limit_in_bytes"))
-				// Expect(err).NotTo(HaveOccurred())
-				// memLimit := strings.TrimSpace(string(memLimitBytes))
-				// Expect(memLimit).To(Equal("10241024"))
+				memLimitBytes, err := ioutil.ReadFile(filepath.Join(cgroupPath, "memory.limit_in_bytes"))
+				Expect(err).NotTo(HaveOccurred())
+				memLimit := strings.TrimSpace(string(memLimitBytes))
+				Expect(memLimit).To(Equal("67108864"))
 
 			})
 		})

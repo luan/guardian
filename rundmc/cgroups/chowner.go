@@ -1,6 +1,9 @@
 package cgroups
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+)
 
 //go:generate counterfeiter . OwnerChanger
 type OwnerChanger interface {
@@ -13,5 +16,10 @@ type OSChowner struct {
 }
 
 func (c *OSChowner) Chown(path string) error {
-	return os.Chown(path, c.UID, c.GID)
+	return filepath.Walk(path, func(name string, info os.FileInfo, err error) error {
+		if err == nil {
+			err = os.Chown(name, c.UID, c.GID)
+		}
+		return err
+	})
 }

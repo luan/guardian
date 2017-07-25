@@ -21,6 +21,7 @@ import (
 	"code.cloudfoundry.org/guardian/logging"
 	"code.cloudfoundry.org/guardian/rundmc"
 	"code.cloudfoundry.org/guardian/rundmc/bundlerules"
+	"code.cloudfoundry.org/guardian/rundmc/cgroups"
 	"code.cloudfoundry.org/guardian/rundmc/depot"
 	"code.cloudfoundry.org/guardian/rundmc/execrunner/dadoo"
 	"code.cloudfoundry.org/guardian/rundmc/goci"
@@ -211,16 +212,13 @@ func (cmd *ServerCommand) wireExecRunner(dadooPath, runcPath, runcRoot string, p
 	)
 }
 
-func (cmd *ServerCommand) wireCgroupsStarter(logger lager.Logger) gardener.Starter {
-	var cgroupsMountpoint string
-	if cmd.Server.Tag != "" {
-		cgroupsMountpoint = filepath.Join(os.TempDir(), fmt.Sprintf("cgroups-%s", cmd.Server.Tag))
-	} else {
-		cgroupsMountpoint = "/sys/fs/cgroup"
+func wireCgroupsStarter(logger lager.Logger, tag string, chowner cgroups.OwnerChanger) gardener.Starter {
+	cgroupsMountpoint := "/sys/fs/cgroup"
+	if tag != "" {
+		cgroupsMountpoint = filepath.Join(os.TempDir(), fmt.Sprintf("cgroups-%s", tag))
 	}
 
-	chowner := &rundmc.OwnerChanger{UID: 0, GID: 0}
-	return rundmc.NewStarter(logger, mustOpen("/proc/cgroups"), mustOpen("/proc/self/cgroup"), cgroupsMountpoint, commandRunner(), chowner)
+	return cgroups.NewStarter(logger, mustOpen("/proc/cgroups"), mustOpen("/proc/self/cgroup"), cgroupsMountpoint, commandRunner(), chowner)
 }
 
 func (cmd *ServerCommand) wireExecPreparer() runrunc.ExecPreparer {

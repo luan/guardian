@@ -1,4 +1,4 @@
-package rundmc
+package cgroups
 
 import (
 	"bufio"
@@ -12,7 +12,6 @@ import (
 	"code.cloudfoundry.org/commandrunner"
 	"code.cloudfoundry.org/guardian/logging"
 	"code.cloudfoundry.org/lager"
-	"github.com/opencontainers/runc/libcontainer/cgroups"
 )
 
 type Starter struct {
@@ -25,16 +24,11 @@ type CgroupsFormatError struct {
 	Content string
 }
 
-//go:generate counterfeiter . Chowner
-type Chowner interface {
-	Chown(path string) error
-}
-
 func (err CgroupsFormatError) Error() string {
 	return fmt.Sprintf("unknown /proc/cgroups format: %s", err.Content)
 }
 
-func NewStarter(logger lager.Logger, procCgroupReader io.ReadCloser, procSelfCgroupReader io.ReadCloser, cgroupMountpoint string, runner commandrunner.CommandRunner, chowner Chowner) *Starter {
+func NewStarter(logger lager.Logger, procCgroupReader io.ReadCloser, procSelfCgroupReader io.ReadCloser, cgroupMountpoint string, runner commandrunner.CommandRunner, chowner OwnerChanger) *Starter {
 	return &Starter{
 		&CgroupStarter{
 			CgroupPath:      cgroupMountpoint,
@@ -55,7 +49,7 @@ type CgroupStarter struct {
 	ProcSelfCgroups io.ReadCloser
 
 	Logger  lager.Logger
-	Chowner Chowner
+	Chowner OwnerChanger
 }
 
 func (s *CgroupStarter) Start() error {
@@ -102,30 +96,26 @@ func (s *CgroupStarter) mountCgroupsIfNeeded(logger lager.Logger) error {
 			continue
 		}
 
-		cgroupsToMount, found := subsystemGroupings[subsystem]
-		if !found {
-			cgroupsToMount = subsystem
+		subsystemToMount, folderToCreate := subsystem, "garden"
+		if v, ok := subsystemGroupings[subsystem]; ok {
+			subsystemToMount = v.SubSystem
+			folderToCreate = path.Join(v.Path, "garden")
 		}
 
-		cgroupSubsystemPath := path.Join(s.CgroupPath, subsystem)
-		if err := s.idempotentCgroupMount(logger, cgroupSubsystemPath, cgroupsToMount); err != nil {
+		subsystemMountPath := path.Join(s.CgroupPath, subsystem)
+		if err := s.idempotentCgroupMount(logger, subsystemMountPath, subsystemToMount); err != nil {
 			return err
 		}
 
-		cgroupName, err := cgroups.GetOwnCgroupPath(subsystem)
-		if err != nil {
+		gardenFolderPath := path.Join(s.CgroupPath, subsystem, folderToCreate)
+		if err := os.MkdirAll(gardenFolderPath, 0700); err != nil {
 			return err
 		}
 
-		subGroup := path.Join(cgroupName, "garden")
-
-		if err := os.MkdirAll(subGroup, 0700); err != nil {
+		if err := s.Chowner.Chown(gardenFolderPath); err != nil {
 			return err
 		}
 
-		if err := s.Chowner.Chown(subGroup); err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -142,11 +132,15 @@ func (s *CgroupStarter) mountTmpfsOnCgroupPath(log lager.Logger, path string) {
 	}
 }
 
-func (s *CgroupStarter) subsystemGroupings() (map[string]string, error) {
-	groupings := map[string]string{}
+type group struct {
+	SubSystem string
+	Path      string
+}
+
+func (s *CgroupStarter) subsystemGroupings() (map[string]group, error) {
+	groupings := map[string]group{}
 
 	scanner := bufio.NewScanner(s.ProcSelfCgroups)
-
 	for scanner.Scan() {
 		segs := strings.Split(scanner.Text(), ":")
 		if len(segs) != 3 {
@@ -155,7 +149,7 @@ func (s *CgroupStarter) subsystemGroupings() (map[string]string, error) {
 
 		subsystems := strings.Split(segs[1], ",")
 		for _, subsystem := range subsystems {
-			groupings[subsystem] = segs[1]
+			groupings[subsystem] = group{segs[1], segs[2]}
 		}
 	}
 

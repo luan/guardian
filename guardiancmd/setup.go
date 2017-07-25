@@ -1,11 +1,7 @@
 package guardiancmd
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"code.cloudfoundry.org/guardian/rundmc"
+	"code.cloudfoundry.org/guardian/rundmc/cgroups"
 	"code.cloudfoundry.org/lager"
 )
 
@@ -21,11 +17,7 @@ type SetupCommand struct {
 func (cmd *SetupCommand) Execute(args []string) error {
 	cmd.Logger, _ = cmd.LogLevel.Logger("guardian-setup")
 
-	cgroupsMountpoint := "/sys/fs/cgroup"
-	if cmd.Tag != "" {
-		cgroupsMountpoint = filepath.Join(os.TempDir(), fmt.Sprintf("cgroups-%s", cmd.Tag))
-	}
-	chowner := &rundmc.OwnerChanger{UID: cmd.RootlessUID, GID: cmd.RootlessUID}
-	cgroupStarter := rundmc.NewStarter(cmd.Logger, mustOpen("/proc/cgroups"), mustOpen("/proc/self/cgroup"), cgroupsMountpoint, commandRunner(), chowner)
+	chowner := &cgroups.OSChowner{UID: cmd.RootlessUID, GID: cmd.RootlessUID}
+	cgroupStarter := wireCgroupsStarter(cmd.Logger, cmd.Tag, chowner)
 	return cgroupStarter.Start()
 }

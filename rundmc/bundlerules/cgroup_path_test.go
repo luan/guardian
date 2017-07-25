@@ -1,6 +1,8 @@
 package bundlerules_test
 
 import (
+	"strings"
+
 	"code.cloudfoundry.org/guardian/gardener"
 	"code.cloudfoundry.org/guardian/rundmc/bundlerules"
 	"code.cloudfoundry.org/guardian/rundmc/goci"
@@ -18,4 +20,14 @@ var _ = Describe("CGroup Path", func() {
 		Expect(newBndl.CGroupPath()).To(Equal("garden/banana"))
 	})
 
+	Context("when the hostname is longer than 49 characters", func() {
+		It("should use the last 49 characters of it", func() {
+			newBndl, err := bundlerules.CGroupPath{}.Apply(goci.Bundle(), gardener.DesiredContainerSpec{
+				Hostname: strings.Repeat("banana", 9),
+			}, "not-needed-path")
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(newBndl.CGroupPath()).To(Equal("garden/" + "a" + strings.Repeat("banana", 8)))
+		})
+	})
 })

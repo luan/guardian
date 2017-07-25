@@ -82,7 +82,7 @@ var _ = Describe("gdn setup", func() {
 			Expect(mountpointCmd.Run()).To(Succeed())
 		})
 
-		FContext("when setting up for rootless", func() {
+		Context("when setting up for rootless", func() {
 			var idToStr = func(id uint32) string {
 				return strconv.FormatUint(uint64(id), 10)
 			}
@@ -124,12 +124,6 @@ var _ = Describe("gdn setup", func() {
 
 		AfterEach(func() {
 			Expect(server.DestroyAndStop()).To(Succeed())
-		})
-
-		Context("when the server is running rootless as maximus", func() {
-			It("should be able to create a container", func() {
-
-			})
 		})
 
 		Context("when the server is running as root", func() {

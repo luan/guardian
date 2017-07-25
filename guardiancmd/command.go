@@ -687,6 +687,7 @@ func (cmd *ServerCommand) wireContainerizer(log lager.Logger,
 		bundlerules.Mounts{},
 		bundlerules.Env{},
 		bundlerules.Hostname{},
+		bundlerules.CGroupPath{},
 	}
 	bundleRules = append(bundleRules, osSpecificBundleRules()...)
 

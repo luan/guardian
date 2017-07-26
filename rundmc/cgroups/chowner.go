@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 )
 
-//go:generate counterfeiter . OwnerChanger
-type OwnerChanger interface {
-	Chown(path string) error
+//go:generate counterfeiter . Chowner
+type Chowner interface {
+	RecursiveChown(path string) error
 }
 
 type OSChowner struct {
@@ -15,7 +15,7 @@ type OSChowner struct {
 	GID int
 }
 
-func (c *OSChowner) Chown(path string) error {
+func (c *OSChowner) RecursiveChown(path string) error {
 	return filepath.Walk(path, func(name string, info os.FileInfo, err error) error {
 		if err == nil {
 			err = os.Chown(name, c.UID, c.GID)

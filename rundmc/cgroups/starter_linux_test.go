@@ -25,7 +25,7 @@ var _ = Describe("CgroupStarter", func() {
 		procCgroups     *FakeReadCloser
 		procSelfCgroups *FakeReadCloser
 		logger          lager.Logger
-		chowner         *fakes.FakeOwnerChanger
+		chowner         *fakes.FakeChowner
 
 		tmpDir string
 	)
@@ -39,7 +39,7 @@ var _ = Describe("CgroupStarter", func() {
 		runner = fake_command_runner.New()
 		procCgroups = &FakeReadCloser{Buffer: bytes.NewBufferString("")}
 		procSelfCgroups = &FakeReadCloser{Buffer: bytes.NewBufferString("")}
-		chowner = &fakes.FakeOwnerChanger{}
+		chowner = &fakes.FakeChowner{}
 		starter = &cgroups.CgroupStarter{
 			CgroupPath:      path.Join(tmpDir, "cgroup"),
 			CommandRunner:   runner,
@@ -152,8 +152,8 @@ var _ = Describe("CgroupStarter", func() {
 		It("creates subdirectories owned by the specified user and group", func() {
 			starter.Start()
 			allChowns := []string{}
-			for i := 0; i < chowner.ChownCallCount(); i++ {
-				allChowns = append(allChowns, chowner.ChownArgsForCall(i))
+			for i := 0; i < chowner.RecursiveChownCallCount(); i++ {
+				allChowns = append(allChowns, chowner.RecursiveChownArgsForCall(i))
 			}
 
 			for _, subsystem := range []string{"devices", "cpu", "memory"} {
@@ -192,8 +192,8 @@ var _ = Describe("CgroupStarter", func() {
 			It("creates subdirectories owned by the specified user and group", func() {
 				starter.Start()
 				allChowns := []string{}
-				for i := 0; i < chowner.ChownCallCount(); i++ {
-					allChowns = append(allChowns, chowner.ChownArgsForCall(i))
+				for i := 0; i < chowner.RecursiveChownCallCount(); i++ {
+					allChowns = append(allChowns, chowner.RecursiveChownArgsForCall(i))
 				}
 
 				for _, subsystem := range []string{"memory"} {

@@ -28,7 +28,7 @@ func (err CgroupsFormatError) Error() string {
 	return fmt.Sprintf("unknown /proc/cgroups format: %s", err.Content)
 }
 
-func NewStarter(logger lager.Logger, procCgroupReader io.ReadCloser, procSelfCgroupReader io.ReadCloser, cgroupMountpoint string, runner commandrunner.CommandRunner, chowner OwnerChanger) *Starter {
+func NewStarter(logger lager.Logger, procCgroupReader io.ReadCloser, procSelfCgroupReader io.ReadCloser, cgroupMountpoint string, runner commandrunner.CommandRunner, chowner Chowner) *Starter {
 	return &Starter{
 		&CgroupStarter{
 			CgroupPath:      cgroupMountpoint,
@@ -49,7 +49,7 @@ type CgroupStarter struct {
 	ProcSelfCgroups io.ReadCloser
 
 	Logger  lager.Logger
-	Chowner OwnerChanger
+	Chowner Chowner
 }
 
 func (s *CgroupStarter) Start() error {
@@ -96,10 +96,10 @@ func (s *CgroupStarter) mountCgroupsIfNeeded(logger lager.Logger) error {
 			continue
 		}
 
-		subsystemToMount, folderToCreate := subsystem, "garden"
+		subsystemToMount, dirToCreate := subsystem, "garden"
 		if v, ok := subsystemGroupings[subsystem]; ok {
 			subsystemToMount = v.SubSystem
-			folderToCreate = path.Join(v.Path, "garden")
+			dirToCreate = path.Join(v.Path, "garden")
 		}
 
 		subsystemMountPath := path.Join(s.CgroupPath, subsystem)
@@ -107,15 +107,14 @@ func (s *CgroupStarter) mountCgroupsIfNeeded(logger lager.Logger) error {
 			return err
 		}
 
-		gardenFolderPath := path.Join(s.CgroupPath, subsystem, folderToCreate)
-		if err := os.MkdirAll(gardenFolderPath, 0700); err != nil {
+		gardenDirPath := path.Join(s.CgroupPath, subsystem, dirToCreate)
+		if err := os.MkdirAll(gardenDirPath, 0700); err != nil {
 			return err
 		}
 
-		if err := s.Chowner.Chown(gardenFolderPath); err != nil {
+		if err := s.Chowner.RecursiveChown(gardenDirPath); err != nil {
 			return err
 		}
-
 	}
 
 	return nil

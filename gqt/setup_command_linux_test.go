@@ -17,7 +17,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
-	"golang.org/x/sys/unix"
 )
 
 var _ = Describe("gdn setup", func() {
@@ -90,8 +89,7 @@ var _ = Describe("gdn setup", func() {
 				setupArgs = append(setupArgs, "--rootless-uid", idToStr(unprivilegedUID), "--rootless-gid", idToStr(unprivilegedGID))
 			})
 
-			It("creates a rootless subdirectory owned by maximus for each cgroup subsystem", func() {
-
+			It("chowns the garden cgroup dir to the rootless user for each subsystem", func() {
 				currentCgroup, err := exec.Command("sh", "-c", "cat /proc/self/cgroup | head -1 | awk -F ':' '{print $3}'").CombinedOutput()
 				Expect(err).NotTo(HaveOccurred())
 				cgroupName := strings.TrimSpace(string(currentCgroup))
@@ -103,8 +101,8 @@ var _ = Describe("gdn setup", func() {
 					path := filepath.Join(cgroupsRoot, subsystem.Name(), cgroupName, "garden")
 					Expect(path).To(BeADirectory())
 
-					var stat unix.Stat_t
-					Expect(unix.Stat(path, &stat)).To(Succeed())
+					var stat syscall.Stat_t
+					Expect(syscall.Stat(path, &stat)).To(Succeed())
 					Expect(stat.Uid).To(Equal(unprivilegedUID))
 					Expect(stat.Gid).To(Equal(unprivilegedGID))
 				}

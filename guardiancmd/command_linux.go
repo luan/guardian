@@ -212,7 +212,7 @@ func (cmd *ServerCommand) wireExecRunner(dadooPath, runcPath, runcRoot string, p
 	)
 }
 
-func wireCgroupsStarter(logger lager.Logger, tag string, chowner cgroups.OwnerChanger) gardener.Starter {
+func wireCgroupsStarter(logger lager.Logger, tag string, chowner cgroups.Chowner) gardener.Starter {
 	cgroupsMountpoint := "/sys/fs/cgroup"
 	if tag != "" {
 		cgroupsMountpoint = filepath.Join(os.TempDir(), fmt.Sprintf("cgroups-%s", tag))

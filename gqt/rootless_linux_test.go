@@ -134,7 +134,7 @@ var _ = Describe("rootless containers", func() {
 			})
 		})
 
-		Context("when we setup memory limit", func() {
+		Context("when we setup limits", func() {
 			var cgroupPath, cgroupType string
 			var container garden.Container
 			JustBeforeEach(func() {
@@ -147,24 +147,63 @@ var _ = Describe("rootless containers", func() {
 			})
 
 			BeforeEach(func() {
-				cgroupType = "memory"
 				var err error
 				container, err = client.Create(garden.ContainerSpec{
 					Limits: garden.Limits{
 						Memory: garden.MemoryLimits{
 							LimitInBytes: 64 * 1024 * 1024,
 						},
+						Pid: garden.PidLimits{
+							Max: 100,
+						},
+						CPU: garden.CPULimits{
+							LimitInShares: 512,
+						},
 					},
 				})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("creates container with the specified memory limit", func() {
-				Expect(cgroupPath).To(BeADirectory())
-				memLimitBytes, err := ioutil.ReadFile(filepath.Join(cgroupPath, "memory.limit_in_bytes"))
-				Expect(err).NotTo(HaveOccurred())
-				memLimit := strings.TrimSpace(string(memLimitBytes))
-				Expect(memLimit).To(Equal("67108864"))
+			Describe("the memory cgroup", func() {
+				BeforeEach(func() {
+					cgroupType = "memory"
+				})
+
+				It("creates container with the specified memory limit", func() {
+					Expect(cgroupPath).To(BeADirectory())
+					memLimitBytes, err := ioutil.ReadFile(filepath.Join(cgroupPath, "memory.limit_in_bytes"))
+					Expect(err).NotTo(HaveOccurred())
+					memLimit := strings.TrimSpace(string(memLimitBytes))
+					Expect(memLimit).To(Equal("67108864"))
+				})
+			})
+
+			Describe("the pids cgroup", func() {
+				BeforeEach(func() {
+					cgroupType = "pids"
+				})
+
+				It("creates container with the specified pid limit", func() {
+					Expect(cgroupPath).To(BeADirectory())
+					pidsMaxInBytes, err := ioutil.ReadFile(filepath.Join(cgroupPath, "pids.max"))
+					Expect(err).NotTo(HaveOccurred())
+					pidsMax := strings.TrimSpace(string(pidsMaxInBytes))
+					Expect(pidsMax).To(Equal("100"))
+				})
+			})
+
+			Describe("the cpu cgroup", func() {
+				BeforeEach(func() {
+					cgroupType = "cpu"
+				})
+
+				It("creates container with the specified cpu limits", func() {
+					Expect(cgroupPath).To(BeADirectory())
+					sharesBytes, err := ioutil.ReadFile(filepath.Join(cgroupPath, "cpu.shares"))
+					Expect(err).NotTo(HaveOccurred())
+					shares := strings.TrimSpace(string(sharesBytes))
+					Expect(shares).To(Equal("512"))
+				})
 			})
 		})
 	})

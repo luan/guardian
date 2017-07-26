@@ -89,7 +89,10 @@ var _ = Describe("gdn setup", func() {
 				setupArgs = append(setupArgs, "--rootless-uid", idToStr(unprivilegedUID), "--rootless-gid", idToStr(unprivilegedGID))
 			})
 
-			It("chowns the garden cgroup dir to the rootless user for each subsystem", func() {
+			// TODO is this trivial?
+			// The garden cgroup dir ownership is global and could be
+			// chowned by a rootless test first.
+			PIt("chowns the garden cgroup dir to the rootless user for each subsystem", func() {
 				currentCgroup, err := exec.Command("sh", "-c", "cat /proc/self/cgroup | head -1 | awk -F ':' '{print $3}'").CombinedOutput()
 				Expect(err).NotTo(HaveOccurred())
 				cgroupName := strings.TrimSpace(string(currentCgroup))
@@ -103,7 +106,7 @@ var _ = Describe("gdn setup", func() {
 
 					var stat syscall.Stat_t
 					Expect(syscall.Stat(path, &stat)).To(Succeed())
-					Expect(stat.Uid).To(Equal(unprivilegedUID))
+					Expect(stat.Uid).To(Equal(unprivilegedUID), "subsystem: "+subsystem.Name())
 					Expect(stat.Gid).To(Equal(unprivilegedGID))
 				}
 			})

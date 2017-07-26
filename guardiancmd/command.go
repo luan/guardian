@@ -371,7 +371,7 @@ func (cmd *ServerCommand) Run(signals <-chan os.Signal, ready chan<- struct{}) e
 
 	starters := []gardener.Starter{}
 	if !cmd.Server.SkipSetup {
-		chowner := &cgroups.OSChowner{UID: 0, GID: 0}
+		chowner := &cgroups.OSChowner{}
 		starters = append(starters, wireCgroupsStarter(logger, cmd.Server.Tag, chowner))
 	}
 	if cmd.Network.Plugin.Path() == "" {

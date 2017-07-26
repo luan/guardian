@@ -300,6 +300,7 @@ var _ = Describe("Surviving Restarts", func() {
 			Context("when creating a container after restart", func() {
 				It("should not allocate ports used before restart", func() {
 					secondContainer, err := client.Create(garden.ContainerSpec{})
+					Expect(err).NotTo(HaveOccurred())
 					secondContainerHostPort, _, err := secondContainer.NetIn(0, 8080)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(hostNetInPort).NotTo(Equal(secondContainerHostPort))

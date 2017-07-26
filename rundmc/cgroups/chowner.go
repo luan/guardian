@@ -1,6 +1,7 @@
 package cgroups
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 )
@@ -11,15 +12,24 @@ type Chowner interface {
 }
 
 type OSChowner struct {
-	UID int
-	GID int
+	UID *int
+	GID *int
 }
 
 func (c *OSChowner) RecursiveChown(path string) error {
-	return filepath.Walk(path, func(name string, info os.FileInfo, err error) error {
-		if err == nil {
-			err = os.Chown(name, c.UID, c.GID)
+	if (c.UID == nil) != (c.GID == nil) {
+		return errors.New("either both UID and GID must be nil, or neither can be nil")
+	}
+
+	if c.UID == nil || c.GID == nil {
+		return nil
+	}
+
+	return filepath.Walk(path, func(name string, info os.FileInfo, statErr error) error {
+		if statErr != nil {
+			return statErr
 		}
-		return err
+
+		return os.Chown(name, *c.UID, *c.GID)
 	})
 }

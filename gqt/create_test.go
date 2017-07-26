@@ -367,7 +367,7 @@ var _ = Describe("Creating a Container", func() {
 			cpuset := readFileContent(fmt.Sprintf("/proc/%d/cpuset", clientPid))
 			cpuset = strings.TrimLeft(cpuset, "/")
 
-			cpuSharesPath := fmt.Sprintf("%s/cgroups-%d/cpu/%s/%s/cpu.shares", client.TmpDir,
+			cpuSharesPath := fmt.Sprintf("%s/cgroups-%d/cpu/%s/garden/%s/cpu.shares", client.TmpDir,
 				GinkgoParallelNode(), cpuset, container.Handle())
 
 			cpuShares := readFileContent(cpuSharesPath)
@@ -401,7 +401,7 @@ var _ = Describe("Creating a Container", func() {
 		checkBlockIOWeightInContainer := func(container garden.Container, expected string) {
 			parentCgroupPath := findCgroupPath(client.Pid, "blkio")
 			parentCgroupPath = strings.TrimLeft(parentCgroupPath, "/")
-			blkIOWeightPath := fmt.Sprintf("%s/cgroups-%d/blkio/%s/%s/blkio.weight", client.TmpDir,
+			blkIOWeightPath := fmt.Sprintf("%s/cgroups-%d/blkio/%s/garden/%s/blkio.weight", client.TmpDir,
 				GinkgoParallelNode(), parentCgroupPath, container.Handle())
 
 			blkIOWeight := readFileContent(blkIOWeightPath)

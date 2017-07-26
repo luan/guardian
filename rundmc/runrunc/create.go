@@ -35,7 +35,8 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 
 	defer log.Info("finished")
 
-	logFilePath := filepath.Join(bundlePath, "create.log")
+	// logFilePath := filepath.Join(bundlePath, "create.log")
+	logFilePath := "/var/vcap/sys/log/garden/garden.stdout.log"
 	pidFilePath := filepath.Join(bundlePath, "pidfile")
 
 	globalArgs := []string{
@@ -67,6 +68,16 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 		"logPath":     logFilePath,
 		"pidFilePath": pidFilePath,
 	})
+
+	if err := os.MkdirAll("/var/vcap/sys/log/garden/vmstatlogs", 0777); err != nil {
+		log.Error("making vmstat log file", err)
+	}
+	vmstatLogFilePath := fmt.Sprintf("/var/vcap/sys/log/garden/vmstatlogs/%s", id)
+	args := fmt.Sprintf("echo 'id: %s' >> %s;  date >> %s; vmstat 1 10 >> %s", id, vmstatLogFilePath, vmstatLogFilePath, vmstatLogFilePath)
+	vmstatCmd := exec.Command("/bin/sh", "-c", args)
+	if err := c.commandRunner.Start(vmstatCmd); err != nil {
+		log.Error("running-vmstat", err)
+	}
 
 	err := c.commandRunner.Run(cmd)
 

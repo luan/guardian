@@ -53,6 +53,9 @@ func NewConfigurer(resolvConfigurer DnsResolvConfigurer, hostConfigurer HostConf
 }
 
 func (c *configurer) Apply(log lager.Logger, cfg NetworkConfig, pid int) error {
+	log.Info("configurer.apply.starting")
+	defer log.Info("configurer.apply.finished")
+
 	if err := c.dnsResolvConfigurer.Configure(log, cfg, pid); err != nil {
 		return err
 	}
@@ -61,9 +64,11 @@ func (c *configurer) Apply(log lager.Logger, cfg NetworkConfig, pid int) error {
 		return err
 	}
 
+	log.Info("configurer.apply.creating-instanceChain")
 	if err := c.instanceChainCreator.Create(log, cfg.ContainerHandle, cfg.IPTableInstance, cfg.BridgeName, cfg.ContainerIP, cfg.Subnet); err != nil {
 		return err
 	}
+	log.Info("configurer.apply.instanceChain-created")
 
 	return c.containerConfigurer.Apply(log, cfg, pid)
 }
